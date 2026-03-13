@@ -42,10 +42,12 @@ function restoreSettings() {
 
 function restoreResult() {
   const savedResult = parseJson(localStorage.getItem(RESULT_KEY), null);
-  if (savedResult) {
-    renderResult(savedResult);
-    setStatus("已載入上一次整理結果。");
+  if (!savedResult) {
+    return;
   }
+
+  renderResult(savedResult);
+  setStatus("已載入上一次整理結果。");
 }
 
 async function handleSummarizeText() {
@@ -71,14 +73,14 @@ async function handleSummarizeText() {
 
   const model = modelSelect.value || DEFAULT_MODEL;
   const title = manualTitleInput.value.trim();
-  setBusy(true, "正在整理貼上的文字...");
+  setBusy(true, "正在進行深入條列整理...");
 
   try {
     const result = await summarizeManualText({ text, apiKey, model, title });
     persistSettings();
     localStorage.setItem(RESULT_KEY, JSON.stringify(result));
     renderResult(result);
-    setStatus("整理完成。結果已保存在目前裝置瀏覽器。", false);
+    setStatus("整理完成。已更新為深入條列整理結果。", false);
   } catch (error) {
     setStatus(error.message || "整理失敗，請稍後再試。", true);
   } finally {
@@ -156,46 +158,45 @@ async function summarizeManualText({ text, apiKey, model, title }) {
 function buildSystemPrompt() {
   return [
     "你是專門整理內容的繁體中文研究助理。",
-    "所有輸出欄位、句子、標題、摘要、條列都必須使用自然且完整的繁體中文。",
-    "禁止輸出簡體中文。若原文是英文或簡體中文，請將整理結果改寫成繁體中文。",
+    "第一優先是輸出有效 JSON，不能包含 markdown 程式碼區塊、前言、後記或額外說明。",
+    "第二優先是所有輸出欄位、句子、標題、摘要、條列都必須使用自然且完整的繁體中文。禁止輸出簡體中文。若原文是英文或簡體中文，請將整理結果改寫成繁體中文。",
+    "第三優先是輸出深入條列整理，而不是簡易摘要、散文式心得或空泛導讀。",
+    "第四優先是嚴格忠於提供內容，避免幻覺補完。",
+    "不可補寫原文未明說的背景、因果、立場、動機或結論。",
+    "不可把常識、猜測、模型推論或外部知識當成原文事實。",
+    "若資訊不足，只能保守描述為文中未明確說明，或直接省略，不可自行填空。",
+    "若內容存在不確定、衝突或分歧，必須如實呈現，不可強行統整為單一結論。",
     "可保留必要的原文專有名詞，但主要敘述必須是繁體中文。",
-    "摘要風格必須是重點筆記，不要寫成散文或空泛心得。",
+    "每個欄位請避免重複彼此內容，避免反覆講同一件事。",
     "這次來源是使用者手動貼上的文字。",
-    "手動模式不需要頁面高亮，也不需要原文 block_ids 依據。",
-    "key_points、main_takeaways、key_facts、action_items 若輸出物件，block_ids 固定為空陣列。",
-    "important_block_ids 固定為空陣列。",
-    "回覆必須是有效 JSON，不能包含 markdown 程式碼區塊或額外說明。"
+    "請整理出較深入的脈絡、主要觀點、關鍵事實與整體結論，但不要超出原文內容。"
   ].join(" ");
 }
 
 function buildUserPrompt(payload) {
   return [
-    "請把下面的手動貼上文字整理成繁體中文重點筆記。",
-    jsonSchemaText(),
-    "輸出規則：",
-    "1. 所有文字都必須是繁體中文。",
-    "2. summary 要是短摘要，不要太空泛。",
-    "3. key_points、main_takeaways、key_facts、action_items 都要寫成筆記式條列重點。",
-    "4. 手動模式下所有 block_ids 都必須是空陣列。",
-    "5. important_block_ids 必須是空陣列。",
-    "6. 如果沒有可行動項目，action_items 請回傳空陣列。",
-    `來源標題：${payload.pageMeta.title || ""}`,
-    payload.blocks.map((block) => block.text).join("\n\n")
-  ].join("\n");
-}
-
-function jsonSchemaText() {
-  return [
+    "請把下面的手動貼上文字整理成繁體中文深入條列筆記。",
     "請只輸出 JSON，欄位結構必須完全符合下列格式：",
     "{",
     '  "title": string,',
     '  "summary": string,',
-    '  "key_points": Array<{ "text": string, "block_ids": string[] }>,',
-    '  "main_takeaways": Array<{ "text": string, "block_ids": string[] }>,',
-    '  "key_facts": Array<{ "text": string, "block_ids": string[] }>,',
-    '  "action_items": Array<{ "text": string, "block_ids": string[] }>,',
-    '  "important_block_ids": string[]',
-    "}"
+    '  "key_points": string[],',
+    '  "main_takeaways": string[],',
+    '  "key_facts": string[],',
+    '  "action_items": string[]',
+    "}",
+    "輸出規則：",
+    "1. title 要精準概括內容主題。",
+    "2. summary 要寫成較完整的導讀型摘要，說清楚主題、背景與重點，不要只有兩三句空話。",
+    "3. key_points 要整理主要論點與其脈絡，每點都要有資訊量，不要只寫標題式短句。",
+    "4. main_takeaways 要提煉更高層的整體結論、意義或判斷，但不能超出原文。",
+    "5. key_facts 要保留具體資訊、數字、條件、限制、事件或明確補充。",
+    "6. action_items 只有在內容明確存在建議、做法、後續步驟或可執行方向時才輸出，否則回傳空陣列。",
+    "7. 每個陣列欄位盡量控制在 3 到 6 點，每點用完整句子表達，但避免過長段落。",
+    "8. 不可重複 summary 內容，也不要讓不同欄位反覆講同一件事。",
+    "9. 若原文沒有提供足夠依據，就不要自行補完。",
+    `來源標題：${payload.pageMeta.title || ""}`,
+    payload.blocks.map((block) => block.text).join("\n\n")
   ].join("\n");
 }
 
@@ -222,20 +223,12 @@ function normalizeAnalysis(parsed) {
     return value
       .map((item) => {
         if (typeof item === "string") {
-          const text = item.trim();
-          return text ? { text, block_ids: [] } : null;
+          return item.trim();
         }
-
-        if (!item || typeof item !== "object") {
-          return null;
+        if (item && typeof item === "object") {
+          return String(item.text || "").trim();
         }
-
-        const text = String(item.text || "").trim();
-        if (!text) {
-          return null;
-        }
-
-        return { text, block_ids: [] };
+        return "";
       })
       .filter(Boolean);
   };
@@ -246,8 +239,7 @@ function normalizeAnalysis(parsed) {
     key_points: normalizeItems(parsed?.key_points),
     main_takeaways: normalizeItems(parsed?.main_takeaways),
     key_facts: normalizeItems(parsed?.key_facts),
-    action_items: normalizeItems(parsed?.action_items),
-    important_block_ids: []
+    action_items: normalizeItems(parsed?.action_items)
   };
 }
 
@@ -279,12 +271,12 @@ function renderResult(result) {
   renderList(mainTakeaways, result.analysis.main_takeaways, "沒有主要結論。");
   renderList(keyFacts, result.analysis.key_facts, "沒有關鍵事實。");
   renderList(actionItems, result.analysis.action_items, "沒有可行動項目。");
-  resultMeta.textContent = `手動貼文字｜文章模式｜${result.model}｜${formatTime(result.createdAt)}`;
+  resultMeta.textContent = `手動貼文字｜深入整理模式｜${result.model}｜${formatTime(result.createdAt)}`;
 }
 
 function clearResult() {
   resultTitle.textContent = "尚無結果";
-  resultSummary.textContent = "輸入文字並執行整理後，這裡會顯示繁體中文摘要與重點。";
+  resultSummary.textContent = "輸入文字並執行整理後，這裡會顯示繁體中文的深入條列整理結果。";
   resultMeta.textContent = "";
   renderList(keyPoints, [], "沒有關鍵重點。");
   renderList(mainTakeaways, [], "沒有主要結論。");
@@ -296,7 +288,16 @@ function renderList(container, items, emptyText) {
   container.innerHTML = "";
   const values = Array.isArray(items) ? items : [];
 
-  if (!values.length) {
+  const list = document.createElement("ul");
+  values.forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = typeof item === "string" ? item : String(item?.text || "").trim();
+    if (li.textContent) {
+      list.appendChild(li);
+    }
+  });
+
+  if (!list.childElementCount) {
     const empty = document.createElement("p");
     empty.className = "empty-text";
     empty.textContent = emptyText;
@@ -304,12 +305,6 @@ function renderList(container, items, emptyText) {
     return;
   }
 
-  const list = document.createElement("ul");
-  values.forEach((item) => {
-    const li = document.createElement("li");
-    li.textContent = typeof item === "string" ? item : item.text || "";
-    list.appendChild(li);
-  });
   container.appendChild(list);
 }
 
@@ -356,7 +351,7 @@ function setBusy(isBusy, message = "") {
 
 function setStatus(message, isError = false) {
   statusText.textContent = message;
-  statusText.style.color = isError ? "#9a2e16" : "";
+  statusText.style.color = isError ? "#ff9a85" : "";
 }
 
 function parseJson(raw, fallback) {

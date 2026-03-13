@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#c86322" />
-    <meta name="description" content="把貼上的文字整理成繁體中文重點筆記，支援手機、平板與桌面。" />
+    <meta name="theme-color" content="#1d1a18" />
+    <meta name="description" content="把貼上的文字整理成繁體中文深入條列整理，支援手機、平板與桌面。" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Abstract" />
     <title>Abstract PWA</title>
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -18,11 +18,11 @@
     <main class="page-shell">
       <section class="hero-card">
         <p class="eyebrow">Abstract PWA</p>
-        <h1>把文字整理成繁體中文重點筆記</h1>
-        <p class="hero-copy">這是可直接部署的純前端版本，支援手機、平板與桌面瀏覽器。內容會直接從你的裝置送到 DeepSeek，不需要你的電腦一直開著。</p>
+        <h1>把文字整理成更深入的繁體中文條列解析</h1>
+        <p class="hero-copy">手機、平板與桌面都能直接使用。這個版本會優先輸出深入條列整理，並盡量避免模型自行補完原文未提供的背景、因果或結論。</p>
         <div class="hero-tags">
-          <span>純前端</span>
-          <span>PWA</span>
+          <span>深入整理</span>
+          <span>避免幻覺補完</span>
           <span>繁體中文</span>
         </div>
       </section>
@@ -30,7 +30,7 @@
       <section class="panel input-panel">
         <div class="notice-card">
           <strong>使用提醒</strong>
-          <p>DeepSeek API Key 會直接從目前裝置送到 DeepSeek，並只保存在你的瀏覽器本機。共用裝置不建議儲存。</p>
+          <p>DeepSeek API Key 會直接從目前裝置送到 DeepSeek，並只保存在你的瀏覽器本機。共用裝置不建議儲存。這個版本只支援手動貼文字整理，不抓網址內容。</p>
         </div>
 
         <div class="field-group two-up">
@@ -54,12 +54,12 @@
           </label>
           <label class="field">
             <span>文字內容</span>
-            <textarea id="manualTextInput" rows="12" placeholder="把你想整理的文字貼在這裡，支援中英文內容，輸出會統一轉成繁體中文。"></textarea>
+            <textarea id="manualTextInput" rows="12" placeholder="把你想整理的文字貼在這裡。輸出會統一轉成繁體中文，並盡量保留原文脈絡而不過度補完。"></textarea>
           </label>
         </div>
 
         <div class="action-row">
-          <button id="summarizeTextButton" class="primary">開始整理</button>
+          <button id="summarizeTextButton" class="primary">開始深入整理</button>
           <button id="clearButton" class="secondary" type="button">清空內容</button>
         </div>
 
@@ -76,7 +76,7 @@
           <p id="resultMeta" class="meta"></p>
         </div>
 
-        <p id="resultSummary" class="summary">輸入文字並執行整理後，這裡會顯示繁體中文摘要與重點。</p>
+        <p id="resultSummary" class="summary">輸入文字並執行整理後，這裡會顯示繁體中文的深入條列整理結果。</p>
 
         <section class="result-section">
           <h3>關鍵重點</h3>
