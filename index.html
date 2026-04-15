@@ -45,6 +45,16 @@
               <option value="deepseek-reasoner">deepseek-reasoner</option>
             </select>
           </label>
+          <label class="field" style="grid-column: 1 / -1;">
+            <span>Prompt 樣式</span>
+            <select id="promptPresetSelect">
+              <option value="bullet_points_first">請用條列式整理重點，先給結論，再列出 5 到 10 個關鍵要點。</option>
+              <option value="plain_language">請用白話方式整理，讓非專業讀者也能快速看懂。</option>
+              <option value="summary_actions">請整理成「重點摘要 + 可執行行動項」，行動項請具體。</option>
+              <option value="brief_then_dive">請先做精簡摘要，再補充值得深入看的爭議、限制或疑點。</option>
+              <option value="three_to_five_sentences">請先用 3 到 5 句做摘要，再補充最重要的關鍵點。</option>
+            </select>
+          </label>
         </div>
 
         <div class="field-group">

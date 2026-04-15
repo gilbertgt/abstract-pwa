@@ -1,5 +1,6 @@
 ﻿const apiKeyInput = document.getElementById("apiKeyInput");
 const modelSelect = document.getElementById("modelSelect");
+const promptPresetSelect = document.getElementById("promptPresetSelect");
 const manualTitleInput = document.getElementById("manualTitleInput");
 const manualTextInput = document.getElementById("manualTextInput");
 const summarizeTextButton = document.getElementById("summarizeTextButton");
@@ -18,10 +19,34 @@ const STORAGE_KEY = "abstract-pwa-settings";
 const RESULT_KEY = "abstract-pwa-last-result";
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
 const DEFAULT_MODEL = "deepseek-chat";
+const DEFAULT_PROMPT_PRESET = "bullet_points_first";
+const PROMPT_PRESETS = {
+  bullet_points_first: {
+    label: "請用條列式整理重點，先給結論，再列出 5 到 10 個關鍵要點。",
+    instruction: "請用條列式整理重點，先給結論，再列出 5 到 10 個關鍵要點。"
+  },
+  plain_language: {
+    label: "請用白話方式整理，讓非專業讀者也能快速看懂。",
+    instruction: "請用白話方式整理，讓非專業讀者也能快速看懂。"
+  },
+  summary_actions: {
+    label: "請整理成「重點摘要 + 可執行行動項」，行動項請具體。",
+    instruction: "請整理成「重點摘要 + 可執行行動項」，行動項請具體。"
+  },
+  brief_then_dive: {
+    label: "請先做精簡摘要，再補充值得深入看的爭議、限制或疑點。",
+    instruction: "請先做精簡摘要，再補充值得深入看的爭議、限制或疑點。"
+  },
+  three_to_five_sentences: {
+    label: "請先用 3 到 5 句做摘要，再補充最重要的關鍵點。",
+    instruction: "請先用 3 到 5 句做摘要，再補充最重要的關鍵點。"
+  }
+};
 
 init();
 summarizeTextButton.addEventListener("click", handleSummarizeText);
 clearButton.addEventListener("click", handleClear);
+promptPresetSelect.addEventListener("change", handlePromptPresetChange);
 window.addEventListener("online", updateOnlineState);
 window.addEventListener("offline", updateOnlineState);
 
@@ -36,8 +61,14 @@ function restoreSettings() {
   const saved = parseJson(localStorage.getItem(STORAGE_KEY), {});
   apiKeyInput.value = saved.apiKey || "";
   modelSelect.value = saved.model || DEFAULT_MODEL;
+  const normalizedPromptPreset = normalizePromptPreset(saved.promptPreset);
+  promptPresetSelect.value = normalizedPromptPreset;
   manualTitleInput.value = saved.title || "";
   manualTextInput.value = saved.text || "";
+
+  if (saved.promptPreset !== normalizedPromptPreset) {
+    persistSettings();
+  }
 }
 
 function restoreResult() {
@@ -73,10 +104,12 @@ async function handleSummarizeText() {
 
   const model = modelSelect.value || DEFAULT_MODEL;
   const title = manualTitleInput.value.trim();
+  const promptPreset = normalizePromptPreset(promptPresetSelect.value);
+  promptPresetSelect.value = promptPreset;
   setBusy(true, "正在進行深入條列整理...");
 
   try {
-    const result = await summarizeManualText({ text, apiKey, model, title });
+    const result = await summarizeManualText({ text, apiKey, model, title, promptPreset });
     persistSettings();
     localStorage.setItem(RESULT_KEY, JSON.stringify(result));
     renderResult(result);
@@ -97,7 +130,13 @@ function handleClear() {
   setStatus("已清空輸入內容與暫存結果。");
 }
 
-async function summarizeManualText({ text, apiKey, model, title }) {
+function handlePromptPresetChange() {
+  const normalizedPromptPreset = normalizePromptPreset(promptPresetSelect.value);
+  promptPresetSelect.value = normalizedPromptPreset;
+  persistSettings();
+}
+
+async function summarizeManualText({ text, apiKey, model, title, promptPreset }) {
   const blocks = splitManualText(text).map((chunk, index) => ({
     id: `manual-${index + 1}`,
     tag: "manual",
@@ -127,8 +166,8 @@ async function summarizeManualText({ text, apiKey, model, title }) {
       model,
       temperature: 0.2,
       messages: [
-        { role: "system", content: buildSystemPrompt() },
-        { role: "user", content: buildUserPrompt(payload) }
+        { role: "system", content: buildSystemPrompt(promptPreset) },
+        { role: "user", content: buildUserPrompt(payload, promptPreset) }
       ]
     })
   });
@@ -145,17 +184,22 @@ async function summarizeManualText({ text, apiKey, model, title }) {
   }
 
   const analysis = normalizeAnalysis(parseJsonResponse(rawContent));
+  const promptPresetMeta = getPromptPresetMeta(promptPreset);
   return {
     createdAt: new Date().toISOString(),
     sourceType: "manual",
     model,
+    promptPreset: promptPresetMeta.promptPreset,
+    promptPresetLabel: promptPresetMeta.promptPresetLabel,
+    promptStyleLabel: promptPresetMeta.promptPresetLabel,
     pageMeta: payload.pageMeta,
     blocks: [],
     analysis
   };
 }
 
-function buildSystemPrompt() {
+function buildSystemPrompt(promptPreset) {
+  const preset = resolvePromptPreset(promptPreset);
   return [
     "你是專門整理內容的繁體中文研究助理。",
     "第一優先是輸出有效 JSON，不能包含 markdown 程式碼區塊、前言、後記或額外說明。",
@@ -168,12 +212,14 @@ function buildSystemPrompt() {
     "若內容存在不確定、衝突或分歧，必須如實呈現，不可強行統整為單一結論。",
     "可保留必要的原文專有名詞，但主要敘述必須是繁體中文。",
     "每個欄位請避免重複彼此內容，避免反覆講同一件事。",
+    `這次整理的風格偏好是：${preset.instruction}`,
     "這次來源是使用者手動貼上的文字。",
     "請整理出較深入的脈絡、主要觀點、關鍵事實與整體結論，但不要超出原文內容。"
   ].join(" ");
 }
 
-function buildUserPrompt(payload) {
+function buildUserPrompt(payload, promptPreset) {
+  const preset = resolvePromptPreset(promptPreset);
   return [
     "請把下面的手動貼上文字整理成繁體中文深入條列筆記。",
     "請只輸出 JSON，欄位結構必須完全符合下列格式：",
@@ -195,6 +241,7 @@ function buildUserPrompt(payload) {
     "7. 每個陣列欄位盡量控制在 3 到 6 點，每點用完整句子表達，但避免過長段落。",
     "8. 不可重複 summary 內容，也不要讓不同欄位反覆講同一件事。",
     "9. 若原文沒有提供足夠依據，就不要自行補完。",
+    `整理方式：${preset.label}`,
     `來源標題：${payload.pageMeta.title || ""}`,
     payload.blocks.map((block) => block.text).join("\n\n")
   ].join("\n");
@@ -271,7 +318,8 @@ function renderResult(result) {
   renderList(mainTakeaways, result.analysis.main_takeaways, "沒有主要結論。");
   renderList(keyFacts, result.analysis.key_facts, "沒有關鍵事實。");
   renderList(actionItems, result.analysis.action_items, "沒有可行動項目。");
-  resultMeta.textContent = `手動貼文字｜深入整理模式｜${result.model}｜${formatTime(result.createdAt)}`;
+  const promptLabel = result.promptPresetLabel || result.promptStyleLabel || (result.promptPreset ? getPromptPresetMeta(result.promptPreset).promptPresetLabel : "未提供");
+  resultMeta.textContent = `手動貼文字｜樣式：${promptLabel}｜深入整理模式｜${result.model}｜${formatTime(result.createdAt)}`;
 }
 
 function clearResult() {
@@ -309,13 +357,15 @@ function renderList(container, items, emptyText) {
 }
 
 function persistSettings() {
+  const promptPreset = normalizePromptPreset(promptPresetSelect.value);
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       apiKey: apiKeyInput.value.trim(),
       model: modelSelect.value,
       title: manualTitleInput.value,
-      text: manualTextInput.value
+      text: manualTextInput.value,
+      promptPreset
     })
   );
 }
@@ -342,6 +392,7 @@ function setBusy(isBusy, message = "") {
   clearButton.disabled = isBusy;
   apiKeyInput.disabled = isBusy;
   modelSelect.disabled = isBusy;
+  promptPresetSelect.disabled = isBusy;
   manualTitleInput.disabled = isBusy;
   manualTextInput.disabled = isBusy;
   if (message) {
@@ -360,6 +411,24 @@ function parseJson(raw, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function resolvePromptPreset(promptPreset) {
+  return PROMPT_PRESETS[promptPreset] || PROMPT_PRESETS[DEFAULT_PROMPT_PRESET];
+}
+
+function normalizePromptPreset(promptPreset) {
+  return PROMPT_PRESETS[promptPreset] ? promptPreset : DEFAULT_PROMPT_PRESET;
+}
+
+function getPromptPresetMeta(promptPreset) {
+  const normalizedPromptPreset = normalizePromptPreset(promptPreset);
+  const preset = resolvePromptPreset(normalizedPromptPreset);
+
+  return {
+    promptPreset: normalizedPromptPreset,
+    promptPresetLabel: preset.label
+  };
 }
 
 function formatTime(iso) {
