@@ -1,15 +1,21 @@
-﻿const apiKeyInput = document.getElementById("apiKeyInput");
+const apiKeyInput = document.getElementById("apiKeyInput");
 const modelSelect = document.getElementById("modelSelect");
 const promptPresetSelect = document.getElementById("promptPresetSelect");
 const manualTitleInput = document.getElementById("manualTitleInput");
 const manualTextInput = document.getElementById("manualTextInput");
 const summarizeTextButton = document.getElementById("summarizeTextButton");
 const clearButton = document.getElementById("clearButton");
+const statusPill = document.getElementById("statusPill");
+const statusBanner = document.getElementById("statusBanner");
+const statusLabel = document.getElementById("statusLabel");
 const statusText = document.getElementById("statusText");
 const offlineHint = document.getElementById("offlineHint");
 const resultMeta = document.getElementById("resultMeta");
 const resultTitle = document.getElementById("resultTitle");
 const resultSummary = document.getElementById("resultSummary");
+const resultStateCard = document.getElementById("resultStateCard");
+const resultStateLabel = document.getElementById("resultStateLabel");
+const resultStateText = document.getElementById("resultStateText");
 const keyPoints = document.getElementById("keyPoints");
 const mainTakeaways = document.getElementById("mainTakeaways");
 const keyFacts = document.getElementById("keyFacts");
@@ -20,6 +26,13 @@ const RESULT_KEY = "abstract-pwa-last-result";
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
 const DEFAULT_MODEL = "deepseek-chat";
 const DEFAULT_PROMPT_PRESET = "bullet_points_first";
+const STATUS_PILL_TEXT = {
+  idle: "待整理",
+  loading: "整理中",
+  success: "已更新",
+  warning: "離線中",
+  error: "需要留意"
+};
 const PROMPT_PRESETS = {
   bullet_points_first: {
     label: "請用條列式整理重點，先給結論，再列出 5 到 10 個關鍵要點。",
@@ -43,16 +56,36 @@ const PROMPT_PRESETS = {
   }
 };
 
+const appState = {
+  status: {
+    tone: "idle",
+    label: "目前狀態",
+    message: "尚未整理任何內容。"
+  },
+  resultState: {
+    tone: "idle",
+    label: "結果狀態",
+    message: "等待你送出第一筆內容，這裡會同步說明結果目前的狀態。"
+  }
+};
+
 init();
 summarizeTextButton.addEventListener("click", handleSummarizeText);
 clearButton.addEventListener("click", handleClear);
 promptPresetSelect.addEventListener("change", handlePromptPresetChange);
+apiKeyInput.addEventListener("input", persistSettings);
+modelSelect.addEventListener("change", persistSettings);
+manualTitleInput.addEventListener("input", persistSettings);
+manualTextInput.addEventListener("input", persistSettings);
 window.addEventListener("online", updateOnlineState);
 window.addEventListener("offline", updateOnlineState);
 
 async function init() {
+  clearResult();
   restoreSettings();
   restoreResult();
+  renderStatus();
+  renderResultState();
   updateOnlineState();
   await registerServiceWorker();
 }
@@ -78,7 +111,14 @@ function restoreResult() {
   }
 
   renderResult(savedResult);
-  setStatus("已載入上一次整理結果。");
+  setStatus("已載入上一次整理結果。", {
+    tone: "success",
+    label: "本機結果"
+  });
+  setResultState("目前顯示的是最近一次保存在這台裝置上的整理結果。", {
+    tone: "success",
+    label: "結果已還原"
+  });
 }
 
 async function handleSummarizeText() {
@@ -86,19 +126,32 @@ async function handleSummarizeText() {
   const apiKey = apiKeyInput.value.trim();
 
   if (!text) {
-    setStatus("請先貼上要整理的文字內容。");
+    setStatus("請先貼上要整理的文字內容。", {
+      tone: "error",
+      label: "缺少內容"
+    });
     manualTextInput.focus();
     return;
   }
 
   if (!apiKey) {
-    setStatus("請先輸入 DeepSeek API Key。");
+    setStatus("請先輸入 DeepSeek API Key。", {
+      tone: "error",
+      label: "缺少設定"
+    });
     apiKeyInput.focus();
     return;
   }
 
   if (!navigator.onLine) {
-    setStatus("目前離線中，無法呼叫 DeepSeek。請先連上網路再試一次。");
+    setStatus("目前離線中，無法呼叫 DeepSeek。請先連上網路再試一次。", {
+      tone: "warning",
+      label: "連線狀態"
+    });
+    setResultState("離線時仍可查看先前結果，但新的整理作業會先暫停。", {
+      tone: "warning",
+      label: "等待連線"
+    });
     return;
   }
 
@@ -106,16 +159,34 @@ async function handleSummarizeText() {
   const title = manualTitleInput.value.trim();
   const promptPreset = normalizePromptPreset(promptPresetSelect.value);
   promptPresetSelect.value = promptPreset;
+  persistSettings();
   setBusy(true, "正在進行深入條列整理...");
+  setResultState("正在呼叫 DeepSeek 整理內容，完成後會更新下方所有結果區塊。", {
+    tone: "loading",
+    label: "結果同步中"
+  });
 
   try {
     const result = await summarizeManualText({ text, apiKey, model, title, promptPreset });
-    persistSettings();
     localStorage.setItem(RESULT_KEY, JSON.stringify(result));
     renderResult(result);
-    setStatus("整理完成。已更新為深入條列整理結果。", false);
+    setStatus("整理完成。已更新為深入條列整理結果。", {
+      tone: "success",
+      label: "最近狀態"
+    });
+    setResultState("總覽、重點、結論、事實與行動項目都已更新為最新結果。", {
+      tone: "success",
+      label: "結果已更新"
+    });
   } catch (error) {
-    setStatus(error.message || "整理失敗，請稍後再試。", true);
+    setStatus(error.message || "整理失敗，請稍後再試。", {
+      tone: "error",
+      label: "整理失敗"
+    });
+    setResultState("這次整理沒有完成，你可以檢查 API Key、網路狀態或原始內容後再試一次。", {
+      tone: "error",
+      label: "等待重試"
+    });
   } finally {
     setBusy(false);
   }
@@ -127,7 +198,14 @@ function handleClear() {
   localStorage.removeItem(RESULT_KEY);
   persistSettings();
   clearResult();
-  setStatus("已清空輸入內容與暫存結果。");
+  setStatus("已清空輸入內容與暫存結果。", {
+    tone: "idle",
+    label: "工作區已重置"
+  });
+  setResultState("目前沒有保存中的整理結果。貼上新內容後即可重新開始。", {
+    tone: "idle",
+    label: "等待新結果"
+  });
 }
 
 function handlePromptPresetChange() {
@@ -185,7 +263,7 @@ async function summarizeManualText({ text, apiKey, model, title, promptPreset })
 
   const analysis = normalizeAnalysis(parseJsonResponse(rawContent));
   const promptPresetMeta = getPromptPresetMeta(promptPreset);
-  return {
+  return normalizeStoredResult({
     createdAt: new Date().toISOString(),
     sourceType: "manual",
     model,
@@ -195,7 +273,7 @@ async function summarizeManualText({ text, apiKey, model, title, promptPreset })
     pageMeta: payload.pageMeta,
     blocks: [],
     analysis
-  };
+  });
 }
 
 function buildSystemPrompt(promptPreset) {
@@ -290,6 +368,26 @@ function normalizeAnalysis(parsed) {
   };
 }
 
+function normalizeStoredResult(result) {
+  const promptPresetMeta = getPromptPresetMeta(result?.promptPreset);
+  return {
+    createdAt: String(result?.createdAt || new Date().toISOString()),
+    sourceType: String(result?.sourceType || "manual"),
+    model: String(result?.model || DEFAULT_MODEL),
+    promptPreset: promptPresetMeta.promptPreset,
+    promptPresetLabel: String(result?.promptPresetLabel || result?.promptStyleLabel || promptPresetMeta.promptPresetLabel),
+    promptStyleLabel: String(result?.promptStyleLabel || result?.promptPresetLabel || promptPresetMeta.promptPresetLabel),
+    pageMeta: {
+      title: String(result?.pageMeta?.title || "手動貼上文字"),
+      url: String(result?.pageMeta?.url || ""),
+      lang: String(result?.pageMeta?.lang || "zh-Hant"),
+      contentMode: String(result?.pageMeta?.contentMode || "article")
+    },
+    blocks: Array.isArray(result?.blocks) ? result.blocks : [],
+    analysis: normalizeAnalysis(result?.analysis || {})
+  };
+}
+
 function splitManualText(text) {
   return text
     .split(/\n{2,}/)
@@ -312,48 +410,151 @@ function splitManualText(text) {
 }
 
 function renderResult(result) {
-  resultTitle.textContent = result.analysis.title || "手動整理結果";
-  resultSummary.textContent = result.analysis.summary || "模型沒有回傳摘要。";
-  renderList(keyPoints, result.analysis.key_points, "沒有關鍵重點。");
-  renderList(mainTakeaways, result.analysis.main_takeaways, "沒有主要結論。");
-  renderList(keyFacts, result.analysis.key_facts, "沒有關鍵事實。");
-  renderList(actionItems, result.analysis.action_items, "沒有可行動項目。");
-  const promptLabel = result.promptPresetLabel || result.promptStyleLabel || (result.promptPreset ? getPromptPresetMeta(result.promptPreset).promptPresetLabel : "未提供");
-  resultMeta.textContent = `手動貼文字｜樣式：${promptLabel}｜深入整理模式｜${result.model}｜${formatTime(result.createdAt)}`;
+  const normalizedResult = normalizeStoredResult(result);
+  const { analysis } = normalizedResult;
+
+  resultTitle.textContent = analysis.title || "手動整理結果";
+  resultSummary.textContent = analysis.summary || "模型沒有回傳摘要。";
+  renderEditorialList(keyPoints, analysis.key_points, "目前還沒有可以整理成重點列表的內容。");
+  renderTakeaways(mainTakeaways, analysis.main_takeaways, "目前還沒有足夠明確的整體結論。");
+  renderCardList(keyFacts, analysis.key_facts, "目前沒有抽出明確的關鍵事實。", "fact-card");
+  renderCardList(actionItems, analysis.action_items, "原文中沒有明確的建議、後續步驟或可執行方向。", "action-card");
+
+  const promptLabel = normalizedResult.promptPresetLabel || normalizedResult.promptStyleLabel || getPromptPresetMeta(normalizedResult.promptPreset).promptPresetLabel;
+  renderMetaChips(resultMeta, [
+    "手動貼文字",
+    promptLabel,
+    normalizedResult.model,
+    `更新於 ${formatTime(normalizedResult.createdAt)}`
+  ]);
 }
 
 function clearResult() {
   resultTitle.textContent = "尚無結果";
   resultSummary.textContent = "輸入文字並執行整理後，這裡會顯示繁體中文的深入條列整理結果。";
-  resultMeta.textContent = "";
-  renderList(keyPoints, [], "沒有關鍵重點。");
-  renderList(mainTakeaways, [], "沒有主要結論。");
-  renderList(keyFacts, [], "沒有關鍵事實。");
-  renderList(actionItems, [], "沒有可行動項目。");
+  resultMeta.innerHTML = "";
+  renderEditorialList(keyPoints, [], "目前還沒有可以整理成重點列表的內容。");
+  renderTakeaways(mainTakeaways, [], "目前還沒有足夠明確的整體結論。");
+  renderCardList(keyFacts, [], "目前沒有抽出明確的關鍵事實。", "fact-card");
+  renderCardList(actionItems, [], "原文中沒有明確的建議、後續步驟或可執行方向。", "action-card");
 }
 
-function renderList(container, items, emptyText) {
+function renderEditorialList(container, items, emptyText) {
   container.innerHTML = "";
-  const values = Array.isArray(items) ? items : [];
+  const values = sanitizeItems(items);
 
-  const list = document.createElement("ul");
-  values.forEach((item) => {
-    const li = document.createElement("li");
-    li.textContent = typeof item === "string" ? item : String(item?.text || "").trim();
-    if (li.textContent) {
-      list.appendChild(li);
-    }
-  });
-
-  if (!list.childElementCount) {
-    const empty = document.createElement("p");
-    empty.className = "empty-text";
-    empty.textContent = emptyText;
-    container.appendChild(empty);
+  if (!values.length) {
+    container.appendChild(createEmptyState(emptyText));
     return;
   }
 
+  const list = document.createElement("ol");
+  list.className = "editorial-list";
+  values.forEach((item) => {
+    const listItem = document.createElement("li");
+    listItem.textContent = item;
+    list.appendChild(listItem);
+  });
   container.appendChild(list);
+}
+
+function renderTakeaways(container, items, emptyText) {
+  container.innerHTML = "";
+  const values = sanitizeItems(items);
+
+  if (!values.length) {
+    container.appendChild(createEmptyState(emptyText));
+    return;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "takeaway-block";
+
+  const primary = document.createElement("article");
+  primary.className = "takeaway-card";
+
+  const label = document.createElement("p");
+  label.className = "section-label";
+  label.textContent = "核心結論";
+
+  const copy = document.createElement("p");
+  copy.className = "takeaway-copy";
+  copy.textContent = values[0];
+
+  primary.append(label, copy);
+  wrapper.appendChild(primary);
+
+  if (values.length > 1) {
+    const list = document.createElement("ul");
+    list.className = "stack-list";
+    values.slice(1).forEach((item) => {
+      const listItem = document.createElement("li");
+      listItem.className = "takeaway-secondary";
+      listItem.textContent = item;
+      list.appendChild(listItem);
+    });
+    wrapper.appendChild(list);
+  }
+
+  container.appendChild(wrapper);
+}
+
+function renderCardList(container, items, emptyText, itemClassName) {
+  container.innerHTML = "";
+  const values = sanitizeItems(items);
+
+  if (!values.length) {
+    container.appendChild(createEmptyState(emptyText));
+    return;
+  }
+
+  const list = document.createElement("ul");
+  list.className = itemClassName === "action-card" ? "action-list" : "stack-list";
+  values.forEach((item) => {
+    const listItem = document.createElement("li");
+    listItem.className = itemClassName;
+    listItem.textContent = item;
+    list.appendChild(listItem);
+  });
+  container.appendChild(list);
+}
+
+function renderMetaChips(container, items) {
+  container.innerHTML = "";
+  items
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+    .forEach((item) => {
+      const chip = document.createElement("span");
+      chip.className = "meta-chip";
+      chip.textContent = item;
+      container.appendChild(chip);
+    });
+}
+
+function createEmptyState(message) {
+  const block = document.createElement("div");
+  block.className = "state-card empty-state";
+  block.dataset.tone = "idle";
+
+  const label = document.createElement("p");
+  label.className = "state-label";
+  label.textContent = "目前為空";
+
+  const copy = document.createElement("p");
+  copy.className = "state-copy";
+  copy.textContent = message;
+
+  block.append(label, copy);
+  return block;
+}
+
+function sanitizeItems(items) {
+  return Array.isArray(items)
+    ? items
+        .map((item) => (typeof item === "string" ? item.trim() : String(item?.text || "").trim()))
+        .filter(Boolean)
+    : [];
 }
 
 function persistSettings() {
@@ -383,7 +584,10 @@ async function registerServiceWorker() {
   try {
     await navigator.serviceWorker.register("./sw.js");
   } catch {
-    setStatus("PWA 快取初始化失敗，但不影響一般使用。", true);
+    setStatus("PWA 快取初始化失敗，但不影響一般使用。", {
+      tone: "warning",
+      label: "快取提醒"
+    });
   }
 }
 
@@ -396,13 +600,37 @@ function setBusy(isBusy, message = "") {
   manualTitleInput.disabled = isBusy;
   manualTextInput.disabled = isBusy;
   if (message) {
-    setStatus(message);
+    setStatus(message, {
+      tone: isBusy ? "loading" : "idle",
+      label: isBusy ? "整理進度" : "目前狀態"
+    });
   }
 }
 
-function setStatus(message, isError = false) {
-  statusText.textContent = message;
-  statusText.style.color = isError ? "#ff9a85" : "";
+function setStatus(message, { tone = "idle", label = "目前狀態" } = {}) {
+  appState.status = { tone, label, message };
+  renderStatus();
+}
+
+function renderStatus() {
+  const current = appState.status;
+  statusPill.dataset.tone = current.tone;
+  statusPill.textContent = STATUS_PILL_TEXT[current.tone] || STATUS_PILL_TEXT.idle;
+  statusBanner.dataset.tone = current.tone;
+  statusLabel.textContent = current.label;
+  statusText.textContent = current.message;
+}
+
+function setResultState(message, { tone = "idle", label = "結果狀態" } = {}) {
+  appState.resultState = { tone, label, message };
+  renderResultState();
+}
+
+function renderResultState() {
+  const current = appState.resultState;
+  resultStateCard.dataset.tone = current.tone;
+  resultStateLabel.textContent = current.label;
+  resultStateText.textContent = current.message;
 }
 
 function parseJson(raw, fallback) {
@@ -446,4 +674,3 @@ async function safeReadText(response) {
     return "";
   }
 }
-

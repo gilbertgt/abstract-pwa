@@ -1,113 +1,187 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#1d1a18" />
+    <meta name="theme-color" content="#0e0e10" />
     <meta name="description" content="把貼上的文字整理成繁體中文深入條列整理，支援手機、平板與桌面。" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Abstract" />
     <title>Abstract PWA</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon-192.svg" />
+    <link rel="stylesheet" href="./theme.css" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="page-shell">
-      <section class="hero-card">
-        <p class="eyebrow">Abstract PWA</p>
-        <h1>把文字整理成更深入的繁體中文條列解析</h1>
-        <p class="hero-copy">手機、平板與桌面都能直接使用。這個版本會優先輸出深入條列整理，並盡量避免模型自行補完原文未提供的背景、因果或結論。</p>
-        <div class="hero-tags">
-          <span>深入整理</span>
-          <span>避免幻覺補完</span>
-          <span>繁體中文</span>
-        </div>
-      </section>
-
-      <section class="panel input-panel">
-        <div class="notice-card">
-          <strong>使用提醒</strong>
-          <p>DeepSeek API Key 會直接從目前裝置送到 DeepSeek，並只保存在你的瀏覽器本機。共用裝置不建議儲存。這個版本只支援手動貼文字整理，不抓網址內容。</p>
-        </div>
-
-        <div class="field-group two-up">
-          <label class="field">
-            <span>DeepSeek API Key</span>
-            <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
-          </label>
-          <label class="field">
-            <span>模型</span>
-            <select id="modelSelect">
-              <option value="deepseek-chat">deepseek-chat</option>
-              <option value="deepseek-reasoner">deepseek-reasoner</option>
-            </select>
-          </label>
-          <label class="field" style="grid-column: 1 / -1;">
-            <span>Prompt 樣式</span>
-            <select id="promptPresetSelect">
-              <option value="bullet_points_first">請用條列式整理重點，先給結論，再列出 5 到 10 個關鍵要點。</option>
-              <option value="plain_language">請用白話方式整理，讓非專業讀者也能快速看懂。</option>
-              <option value="summary_actions">請整理成「重點摘要 + 可執行行動項」，行動項請具體。</option>
-              <option value="brief_then_dive">請先做精簡摘要，再補充值得深入看的爭議、限制或疑點。</option>
-              <option value="three_to_five_sentences">請先用 3 到 5 句做摘要，再補充最重要的關鍵點。</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="field-group">
-          <label class="field">
-            <span>自訂標題（可留空）</span>
-            <input id="manualTitleInput" type="text" placeholder="例如：會議摘要、研究筆記、文章摘錄" />
-          </label>
-          <label class="field">
-            <span>文字內容</span>
-            <textarea id="manualTextInput" rows="12" placeholder="把你想整理的文字貼在這裡。輸出會統一轉成繁體中文，並盡量保留原文脈絡而不過度補完。"></textarea>
-          </label>
-        </div>
-
-        <div class="action-row">
-          <button id="summarizeTextButton" class="primary">開始深入整理</button>
-          <button id="clearButton" class="secondary" type="button">清空內容</button>
-        </div>
-
-        <p id="statusText" class="status">尚未整理任何內容。</p>
-        <p id="offlineHint" class="offline-hint" hidden>目前離線中，仍可查看已快取的頁面，但無法呼叫 DeepSeek 進行整理。</p>
-      </section>
-
-      <section class="panel result-panel">
-        <div class="result-head">
-          <div>
-            <p class="section-kicker">整理結果</p>
-            <h2 id="resultTitle">尚無結果</h2>
+      <section class="page-header sc-card">
+        <div class="header-top">
+          <div class="header-copy-block">
+            <p class="header-path">Abstract / Webapp</p>
+            <div class="header-main">
+              <h1>把手動貼上的內容整理成更清楚、更安靜的繁體中文筆記</h1>
+              <p class="header-copy">保留單頁工作流與本機暫存，專注把長文、筆記、會議內容與研究摘錄整理成忠於原文的 Silent Curator 式結果。</p>
+            </div>
           </div>
-          <p id="resultMeta" class="meta"></p>
+          <span id="statusPill" class="status-pill" data-tone="idle">待整理</span>
         </div>
 
-        <p id="resultSummary" class="summary">輸入文字並執行整理後，這裡會顯示繁體中文的深入條列整理結果。</p>
+        <div id="statusBanner" class="header-meta" data-tone="idle">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div class="status-copy-wrap">
+            <p id="statusLabel" class="status-label">目前狀態</p>
+            <p id="statusText" class="status-copy">尚未整理任何內容。</p>
+          </div>
+        </div>
 
-        <section class="result-section">
-          <h3>關鍵重點</h3>
-          <div id="keyPoints"></div>
-        </section>
-        <section class="result-section">
-          <h3>主要結論</h3>
-          <div id="mainTakeaways"></div>
-        </section>
-        <section class="result-section">
-          <h3>關鍵事實</h3>
-          <div id="keyFacts"></div>
-        </section>
-        <section class="result-section">
-          <h3>可行動項目</h3>
-          <div id="actionItems"></div>
-        </section>
+        <div class="meta-chips header-chips" aria-label="產品特性">
+          <span class="meta-chip">手動貼文字</span>
+          <span class="meta-chip">本機暫存</span>
+          <span class="meta-chip">單頁工作流</span>
+          <span class="meta-chip">繁體中文</span>
+        </div>
       </section>
+
+      <div class="content-grid">
+        <section class="workspace-column">
+          <section class="workspace-card sc-card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Workspace</p>
+                <h2>整理工作區</h2>
+              </div>
+              <p class="section-note">先設定 API Key 與風格，再貼上要整理的文字。</p>
+            </div>
+
+            <div class="notice-card">
+              <p class="section-label">使用提醒</p>
+              <p class="support-copy">DeepSeek API Key 會直接從目前裝置送到 DeepSeek，並只保存在這個瀏覽器。共用裝置不建議保留。這個版本只支援手動貼文字整理，不抓網址內容。</p>
+            </div>
+
+            <div class="workspace-fields">
+              <div class="field-grid field-grid-compact">
+                <label class="field">
+                  <span class="field-label">DeepSeek API Key</span>
+                  <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
+                </label>
+
+                <label class="field">
+                  <span class="field-label">模型</span>
+                  <select id="modelSelect">
+                    <option value="deepseek-chat">deepseek-chat</option>
+                    <option value="deepseek-reasoner">deepseek-reasoner</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span class="field-label">Prompt 樣式</span>
+                <select id="promptPresetSelect">
+                  <option value="bullet_points_first">請用條列式整理重點，先給結論，再列出 5 到 10 個關鍵要點。</option>
+                  <option value="plain_language">請用白話方式整理，讓非專業讀者也能快速看懂。</option>
+                  <option value="summary_actions">請整理成「重點摘要 + 可執行行動項」，行動項請具體。</option>
+                  <option value="brief_then_dive">請先做精簡摘要，再補充值得深入看的爭議、限制或疑點。</option>
+                  <option value="three_to_five_sentences">請先用 3 到 5 句做摘要，再補充最重要的關鍵點。</option>
+                </select>
+                <p class="field-helper">整理結果仍會維持相同 JSON schema，只是切換輸出的語氣與編排偏好。</p>
+              </label>
+
+              <label class="field">
+                <span class="field-label">自訂標題（可留空）</span>
+                <input id="manualTitleInput" type="text" placeholder="例如：會議摘要、研究筆記、文章摘錄" />
+              </label>
+
+              <label class="field">
+                <span class="field-label">文字內容</span>
+                <textarea id="manualTextInput" rows="12" placeholder="把你想整理的文字貼在這裡。輸出會統一轉成繁體中文，並盡量保留原文脈絡而不過度補完。"></textarea>
+              </label>
+            </div>
+
+            <div class="action-row">
+              <button id="summarizeTextButton" class="button-primary" type="button">開始深入整理</button>
+              <button id="clearButton" class="button-secondary" type="button">清空內容</button>
+            </div>
+
+            <div id="offlineHint" class="state-card connection-card" data-tone="warning" hidden>
+              <p class="state-label">離線提醒</p>
+              <p class="state-copy">目前離線中，仍可查看已保存的內容與快取頁面，但無法呼叫 DeepSeek 進行新整理。</p>
+            </div>
+          </section>
+        </section>
+
+        <section class="result-column">
+          <section class="result-card sc-card">
+            <div class="section-head result-header">
+              <div>
+                <p class="section-label">Result</p>
+                <h2 id="resultTitle">尚無結果</h2>
+              </div>
+              <p class="section-note">顯示最近一次保存在這台裝置上的整理結果。</p>
+            </div>
+
+            <div id="resultMeta" class="meta-chips" aria-label="結果中繼資料"></div>
+
+            <div class="overview-card">
+              <p class="section-label">總覽</p>
+              <p id="resultSummary" class="summary-copy">輸入文字並執行整理後，這裡會顯示繁體中文的深入條列整理結果。</p>
+            </div>
+
+            <div id="resultStateCard" class="state-card result-state-card" data-tone="idle">
+              <p id="resultStateLabel" class="state-label">結果狀態</p>
+              <p id="resultStateText" class="state-copy">等待你送出第一筆內容，這裡會同步說明結果目前的狀態。</p>
+            </div>
+
+            <section class="result-section">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Key Points</p>
+                  <h3>關鍵重點</h3>
+                </div>
+                <p class="section-note">以編號 editorial list 整理主要論點。</p>
+              </div>
+              <div id="keyPoints"></div>
+            </section>
+
+            <section class="result-section">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Takeaways</p>
+                  <h3>主要結論</h3>
+                </div>
+                <p class="section-note">先呈現一張核心結論卡，再補充延伸觀察。</p>
+              </div>
+              <div id="mainTakeaways"></div>
+            </section>
+
+            <section class="result-section">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Facts</p>
+                  <h3>關鍵事實</h3>
+                </div>
+                <p class="section-note">保留數字、限制、條件與明確補充資訊。</p>
+              </div>
+              <div id="keyFacts"></div>
+            </section>
+
+            <section class="result-section">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Actions</p>
+                  <h3>可行動項目</h3>
+                </div>
+                <p class="section-note">只有原文明確存在建議或後續方向時才會出現。</p>
+              </div>
+              <div id="actionItems"></div>
+            </section>
+          </section>
+        </section>
+      </div>
     </main>
 
     <script type="module" src="./app.js"></script>
   </body>
 </html>
-

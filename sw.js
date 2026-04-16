@@ -1,7 +1,8 @@
-﻿const CACHE_NAME = "abstract-pwa-v1";
+const CACHE_NAME = "abstract-pwa-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./theme.css",
   "./styles.css",
   "./app.js",
   "./manifest.webmanifest",
@@ -53,4 +54,3 @@ async function cacheFirst(request) {
 async function networkOnly(request) {
   return fetch(request);
 }
-

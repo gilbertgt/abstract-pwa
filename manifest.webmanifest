@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "Abstract PWA",
   "short_name": "Abstract",
   "description": "把貼上的文字整理成繁體中文重點筆記。",
@@ -6,8 +6,8 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f3ece1",
-  "theme_color": "#c86322",
+  "background_color": "#0e0e10",
+  "theme_color": "#0e0e10",
   "icons": [
     {
       "src": "./icons/icon-192.svg",
@@ -23,4 +23,3 @@
     }
   ]
 }
-
